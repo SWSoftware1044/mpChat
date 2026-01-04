@@ -7,4 +7,4 @@ Model-Protocol (or mp) Chat is a Python application I developed to talk to AI mo
 # Quickstart
 - Install dependencies from requirements.txt
 - Create an .env file with at least `API_KEY` refering to your (OpenRouter) API key. If a different API is required, point `API_BASE` to it.
-- Clicking on `chat.py` will open the interface.
+- Click on `chat.py` to open the interface.
