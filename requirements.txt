@@ -1,0 +1,5 @@
+ttkbootstrap
+tkfontawesome
+sseclient-py
+requests
+python-dotenv

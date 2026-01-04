@@ -1,0 +1,27 @@
+{
+    "themes": [
+        {
+            "vimix-jade": {
+                "type": "dark",
+                "colors": {
+                    "primary": "#658f32",
+                    "secondary": "#444444",
+                    "success": "#5993a6",
+                    "info": "#7f498c",
+                    "warning": "#b38346",
+                    "danger": "#8c3756",
+                    "light": "#e0e4dc",
+                    "dark": "#303030",
+                    "bg": "#282828",
+                    "fg": "#e0e4dc",
+                    "selectbg": "#383838",
+                    "selectfg": "#ffffff",
+                    "border": "#000000",
+                    "inputfg": "#e0e4dc",
+                    "inputbg": "#303030",
+                    "active": "#1f1f1f"
+                }
+            }
+        }
+    ]
+}
