@@ -26,6 +26,8 @@ from dotenv import load_dotenv
 #https://ttkbootstrap.readthedocs.io/en/latest/
 #https://github.com/jshipley/TkFontAwesome/tree/main
 
+#TODO: investigate bug regarding reasoning transcripts & colors.
+
 load_dotenv(os.path.dirname(__file__)+"/.env")
 
 VERSION = "V2"
@@ -33,10 +35,10 @@ VERSION = "V2"
 BASE = os.getenv("API_BASE","https://openrouter.ai/api/v1/chat/completions")
 KEY = os.getenv("API_KEY","")
 
-MODEL = "anthropic/claude-sonnet-4.5"
-EXTRA = ""
+MODEL = "anthropic/claude-sonnet-4.6"
+EXTRA = {"reasoning":{"enabled":True}}
 
-CTX = re.compile(r"\[\d{4}\]\s+(\w+): ([^\[]*)",re.DOTALL)
+CTX = re.compile(r"⦓\d{4}⦔\s+(\w+): ([^⦓]*)",re.DOTALL)
 
 FEATURES = ["temperature","frequency_penalty","presence_penalty","model","max_tokens"]
 
@@ -500,7 +502,7 @@ class ChatInstance(ttk.Frame):
         frame.rowconfigure(2, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, font=("MS Gothic" if self.international_mode else "Cascadia Mono","10"))
+        self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, undo=True, font=("MS Gothic" if self.international_mode else "Cascadia Mono","10"))
         #self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, font=('MS Gothic', 10))
         self.editor.grid(row=2, column=0, sticky="news")
         self.editor.bind("<Shift-Return>", self.parse_user_input)
@@ -548,14 +550,14 @@ class ChatInstance(ttk.Frame):
 
     def parse_context(self):
         for i, entry in enumerate(self.context):
-            self.viewer.render(entry['content'].strip()+"\n",f"[{i:0>4}] {entry['role'].title():>9}: ",entry["role"])
+            self.viewer.render(entry['content'].strip()+"\n",f"⦓{i:0>4}⦔ {entry['role'].title():>9}: ",entry["role"])
 
     def parse_user_input(self, *args):
         if not self._ctx_freeze:
             user_message = self.editor.get("1.0", "end-1c").rstrip()
             self.editor.delete("1.0", "end")
             if user_message:
-                self.viewer.render(user_message.strip()+"\n",f"[{len(self.context)//2:0>4}] {'User':>9}: ","user")
+                self.viewer.render(user_message.strip()+"\n",f"⦓{len(self.context)//2:0>4}⦔ {'User':>9}: ","user")
                 self.context.append({"role": "user", "content": user_message})
                 self.viewer.textbox.edit_modified(False) #Tell the viewer that we've handled this one and it doesn't need to regen context.
 
@@ -572,7 +574,7 @@ class ChatInstance(ttk.Frame):
         self._ctx_freeze = True #Freeze context because we're adding a bunch of smaller messages, and will update it all at the end.
         self.chat_error = False
 
-        self.viewer.render("",f"[{len(self.context)//2:0>4}] {'Assistant':>9}: ","assistant") #Add header:
+        self.viewer.render("",f"⦓{len(self.context)//2:0>4}⦔ {'Assistant':>9}: ","assistant") #Add header:
 
         for message in self.chat():
             self.viewer.render(message,"","assistant")
