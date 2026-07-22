@@ -27,6 +27,8 @@ from dotenv import load_dotenv
 #https://github.com/jshipley/TkFontAwesome/tree/main
 
 #TODO: investigate bug regarding reasoning transcripts & colors.
+#TODO: look into automatic caching, maybe.
+#TODO: update credit monitor to take from usage stats
 
 load_dotenv(os.path.dirname(__file__)+"/.env")
 
@@ -566,7 +568,7 @@ class ChatInstance(ttk.Frame):
             print(Colors.WARNING + "Context frozen - cannot pass new messages in." + Colors.ENDC)
         return "break"
 
-    def parse_assistant_output(self):
+    def parse_assistant_output(self): #Always runs in a daemon non-main thread.
         self.progress_bar.start()
         self.progress_bar.grid(row=1, column=0, sticky="news")
         self.button_parse_send.grid_forget()
@@ -577,7 +579,7 @@ class ChatInstance(ttk.Frame):
         self.viewer.render("",f"⦓{len(self.context)//2:0>4}⦔ {'Assistant':>9}: ","assistant") #Add header:
 
         for message in self.chat():
-            self.viewer.render(message,"","assistant")
+            self.viewer.render(message,"","assistant") #In theory, we SHOULD NOT be doing this. Fix later with context update.
             if self.event_parse_stop.is_set():
                 self.viewer.render("\n","","assistant")
                 break
@@ -683,6 +685,7 @@ class ChatInstance(ttk.Frame):
             r = resp.json()
             if r.get("error"):
                 print(Colors.FAIL+Colors.UNDERLINE+"Endpoint Error"+Colors.ENDC+": "+Colors.FAIL+r["error"]["message"]+Colors.ENDC)
+                print(r["error"])
                 yield "Endpoint error, check console.\n"
             else:
                 print(resp.json())
