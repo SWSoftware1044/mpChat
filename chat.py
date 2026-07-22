@@ -38,11 +38,13 @@ BASE = os.getenv("API_BASE","https://openrouter.ai/api/v1/chat/completions")
 KEY = os.getenv("API_KEY","")
 
 MODEL = "anthropic/claude-sonnet-4.6"
-EXTRA = {"reasoning":{"enabled":True}}
+#EXTRA = {"reasoning":{"enabled":True}}
+EXTRA = {}
 
 CTX = re.compile(r"⦓\d{4}⦔\s+(\w+): ([^⦓]*)",re.DOTALL)
 
-FEATURES = ["temperature","frequency_penalty","presence_penalty","model","max_tokens"]
+#FEATURES = ["temperature","frequency_penalty","presence_penalty","model","max_tokens"]
+FEATURES = ["temperature","model","max_tokens","reasoning_effort"]
 
 #Taken from blender colors, really should move this somewhere else at some point.
 class Colors(StrEnum):
@@ -264,24 +266,30 @@ class SettingsWindow(Popout):
         self.master = master
         self.protocol("WM_DELETE_WINDOW", self.close)
 
-        self.temperature = self.gen_slider_bars("Temperature",self.master.chat_properties["temperature"],bounds=(0,2),increment=0.05,
+        self.temperature = self.gen_slider_bars("Temperature",self.master.chat_properties.get("temperature",0.8),bounds=(0,2),increment=0.05,
                                                 tooltip="What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.")
-        self.frequency_penalty = self.gen_slider_bars("Frequency Penalty",self.master.chat_properties["frequency_penalty"],bounds=(-2,2),increment=0.1,
-                                                      tooltip="Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.")
-        self.presence_penalty = self.gen_slider_bars("Presence Penalty",self.master.chat_properties["presence_penalty"],bounds=(-2,2),increment=0.1,
-                                                     tooltip="Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.")
+        # self.frequency_penalty = self.gen_slider_bars("Frequency Penalty",self.master.chat_properties["frequency_penalty"],bounds=(-2,2),increment=0.1,
+        #                                               tooltip="Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.")
+        # self.presence_penalty = self.gen_slider_bars("Presence Penalty",self.master.chat_properties["presence_penalty"],bounds=(-2,2),increment=0.1,
+        #                                              tooltip="Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.")
         
         model_frame = ttk.LabelFrame(self,text="Model Name")
         model_frame.pack(side="top",expand=True,fill="both")
-        self.model = tk.StringVar(self,value=self.master.chat_properties["model"])
+        self.model = tk.StringVar(self,value=self.master.chat_properties.get("model", MODEL))
         ttk.Entry(model_frame,exportselection=False,textvariable=self.model).pack(side="left",expand=True,fill="both")
         ToolTip(model_frame,topmost=True,text="ID of the model to use.")
 
         max_tokens_frame = ttk.LabelFrame(self,text="Maximum Tokens")
         max_tokens_frame.pack(side="top",expand=True,fill="both")
-        self.max_tokens = tk.IntVar(self,value=self.master.chat_properties["max_tokens"])
+        self.max_tokens = tk.IntVar(self,value=self.master.chat_properties.get("max_tokens", 2048))
         ttk.Spinbox(max_tokens_frame,from_=0,to=4096,increment=1,textvariable=self.max_tokens).pack(side="left",expand=True,fill="both")
         ToolTip(max_tokens_frame,topmost=True,text="The maximum number of tokens that can be generated in the chat completion.")
+
+        reasoning_frame = ttk.LabelFrame(self,text="Reasoning Effort")
+        reasoning_frame.pack(side="top",expand=True,fill="both")
+        self.reasoning = tk.StringVar(self,value=master.chat_properties.get("reasoning_effort","none"))
+        ttk.Combobox(reasoning_frame,state="readonly",values=["max","xhigh","high","medium","low","minimal","none"],textvariable=self.reasoning).pack(side="left",expand=True,fill="both")
+        ToolTip(reasoning_frame,topmost=True,text="Amount of effort the model uses in reasoning.")
 
         extra_frame = ttk.LabelFrame(self,text="Extra Options (JSON FORMAT ONLY)")
         extra_frame.pack(side="top",expand=True,fill="both")
@@ -329,10 +337,11 @@ class SettingsWindow(Popout):
 
     def close(self):
         chat_properties_temp = {"temperature":self.temperature.get(),
-         "frequency_penalty":self.frequency_penalty.get(),
-         "presence_penalty":self.presence_penalty.get(),
+        #  "frequency_penalty":self.frequency_penalty.get(),
+        #  "presence_penalty":self.presence_penalty.get(),
          "model":self.model.get(),
-         "max_tokens":self.max_tokens.get()}
+         "max_tokens":self.max_tokens.get(),
+         "reasoning_effort":self.reasoning.get()}
         try:
             chat_properties_temp.update(json.loads(self.extra_options.get()))
         except json.JSONDecodeError as e:
@@ -365,7 +374,7 @@ class ChatInstance(ttk.Frame):
         self.user_cache_timeout = kwargs.pop("user_cache_timeout",None)
         print("Current User Cache Mode:", temp_user_cache_active)
 
-        self.chat_properties = kwargs.pop("chat_properties",{"temperature":0.88,"frequency_penalty":0.03,"presence_penalty":0.05,"model":MODEL,"max_tokens":2048})
+        self.chat_properties = kwargs.pop("chat_properties",{"temperature":0.88,"model":MODEL,"max_tokens":2048,"reasoning_effort":"medium"})
         extra = kwargs.pop("extra_properties",None)
         if type(extra) == dict:
             self.chat_properties.update(extra)
@@ -791,8 +800,11 @@ class ChatInstance(ttk.Frame):
         if filename:
             with open(filename, "r", encoding="utf-8") as file:
                 session_data = json.load(file)
-                if "base_properties" in session_data.keys():
+                if "base_properties" in session_data.keys(): #Backwards compatability with files saved from an earlier version.
                     session_data["chat_properties"] = session_data.pop("base_properties")
+                if session_data["chat_properties"].get("reasoning"): #Backwards compatability with files saved from an earlier version.
+                    session_data["chat_properties"]["reasoning_effort"] = session_data["chat_properties"]["reasoning"].get("reasoning_effort","medium")
+                    session_data["chat_properties"].pop("reasoning")
             ##Openrouter Override
             self.new_session(name = Path(filename).stem, **session_data)
 
