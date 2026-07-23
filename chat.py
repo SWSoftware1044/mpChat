@@ -7,6 +7,7 @@ import json
 import sseclient
 import time
 import os
+import queue
 from random import randint
 from requests.exceptions import HTTPError,MissingSchema,InvalidSchema,InvalidURL,Timeout
 from tkinter import filedialog
@@ -26,9 +27,9 @@ from dotenv import load_dotenv
 #https://ttkbootstrap.readthedocs.io/en/latest/
 #https://github.com/jshipley/TkFontAwesome/tree/main
 
-#TODO: investigate bug regarding reasoning transcripts & colors.
 #TODO: look into automatic caching, maybe.
-#TODO: update credit monitor to take from usage stats
+#      - This might actually be done sometimes on the provider side?
+#TODO: figure out how to fix credit updates when request canceled early.
 
 load_dotenv(os.path.dirname(__file__)+"/.env")
 
@@ -311,7 +312,7 @@ class SettingsWindow(Popout):
         ttk.Button(debug_frame, image=self.master.root.context_image, text="CTX", compound="left", width=4, command=lambda: print(json.dumps(self.master.context,indent=4,ensure_ascii=False))).grid(row=0, column=0, sticky="news")
         ttk.Button(debug_frame, image=self.master.root.context_image, text="SYS", compound="left", width=4, command=lambda: print(json.dumps(self.master.system_prompt,indent=4,ensure_ascii=False))).grid(row=0, column=1, sticky="news")
         ttk.Button(debug_frame, image=self.master.root.context_image, text="PFL", compound="left", width=4, command=lambda: print(json.dumps(self.master.prefill,indent=4,ensure_ascii=False))).grid(row=0, column=2, sticky="news")
-        ttk.Button(debug_frame, image=self.master.root.context_image, text="USE", compound="left", width=4, command=lambda: self.master.uus_thread_handler()).grid(row=0, column=3, sticky="news")
+        ttk.Button(debug_frame, image=self.master.root.context_image, text="USE", compound="left", width=4, command=lambda: self.master.root.get_credits()).grid(row=0, column=3, sticky="news")
 
 
     def gen_slider_bars(self,name,variable,bounds,increment,tooltip):
@@ -409,32 +410,6 @@ class ChatInstance(ttk.Frame):
         self.event_parse_stop = threading.Event()
 
         self.edit_frame = self.create_edit_frame()
-        self.bind("<<update_usage>>",self.uus_gui_handler)
-        self.update_usage_statstics()
-        self.key_unset = False
-    
-    def uus_thread_handler(self):
-        threading.Thread(target=self.update_usage_statstics,daemon=True).start()
-
-    def uus_gui_handler(self,event):
-        new_credit_amount = event.x #This is stupid and the only way that this seems to work.
-        if new_credit_amount == -5000:
-            new_credit_amount = "Credits: ERR"
-        else:
-            new_credit_amount = f"Credits: {new_credit_amount/1000:.3f}"
-        self.remaining_usage.set(new_credit_amount)
-    
-    def update_usage_statstics(self):
-            resp = requests.get("https://openrouter.ai/api/v1/credits",headers={"authorization": f"Bearer {KEY}"})
-            if resp.status_code == 200:
-                #newcred = f"Credits: {resp.json()["data"]["limit_remaining"]:.3f}"
-                data = resp.json()["data"]
-                self.event_generate("<<update_usage>>",x=(data["total_credits"]-data["total_usage"])*1000)
-                #self.remaining_usage.set(newcred)
-            else:
-                print(Colors.FAIL+Colors.UNDERLINE+"Key Error"+Colors.ENDC+": "+Colors.FAIL+resp.json()["error"]["message"]+Colors.ENDC)
-                self.event_generate("<<update_usage>>",x=-5000)
-                #self.remaining_usage.set("Credits: ERR")
 
     def context_wait_handler(self):
         if self._ctx_freeze:
@@ -514,7 +489,6 @@ class ChatInstance(ttk.Frame):
         frame.columnconfigure(0, weight=1)
 
         self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, undo=True, font=("MS Gothic" if self.international_mode else "Cascadia Mono","10"))
-        #self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, font=('MS Gothic', 10))
         self.editor.grid(row=2, column=0, sticky="news")
         self.editor.bind("<Shift-Return>", self.parse_user_input)
 
@@ -551,7 +525,7 @@ class ChatInstance(ttk.Frame):
         ttk.Button(menu_frame, text="DELETE", width=5, image=self.root.delete_image, compound="left", command=self.delete_session, bootstyle="danger").grid(row=0, column=10, sticky="news")
     
         self.remaining_usage = tk.StringVar(self,value="Credits: ERR")
-        ttk.Label(menu_frame,textvariable=self.remaining_usage,width=-14).grid(row=0, column=21, sticky="news")
+        ttk.Label(menu_frame,textvariable=self.root.credits_ui,width=-14).grid(row=0, column=21, sticky="news")
 
         #Should be able to put the start and stop buttons in the same place at different times.
         self.button_parse_stop = ttk.Button(menu_frame, text="STOP", width=5, image=self.root.stop_image, compound="right", command=lambda: self.event_parse_stop.set(), bootstyle="warning")
@@ -577,6 +551,14 @@ class ChatInstance(ttk.Frame):
             print(Colors.WARNING + "Context frozen - cannot pass new messages in." + Colors.ENDC)
         return "break"
 
+    def pull_credit_usage_from_generation_id(self,id):
+        """Given an ID for an openrouter generation, return the usage information in credits, or None if the request failed."""
+        resp = requests.get("https://openrouter.ai/api/v1/generation",headers={"authorization": f"Bearer {KEY}"},params={"id":id})
+        if resp.status_code != 200:
+            print(resp.json()["error"]["message"])
+            return None
+        return resp.json()["data"]["usage"]
+
     def parse_assistant_output(self): #Always runs in a daemon non-main thread.
         self.progress_bar.start()
         self.progress_bar.grid(row=1, column=0, sticky="news")
@@ -587,10 +569,16 @@ class ChatInstance(ttk.Frame):
 
         self.viewer.render("",f"⦓{len(self.context)//2:0>4}⦔ {'Assistant':>9}: ","assistant") #Add header:
 
-        for message in self.chat():
+        self.message_id = None
+        self.usage_credits = None
+
+        chat_generator = self.chat()
+        for message in chat_generator:
             self.viewer.render(message,"","assistant") #In theory, we SHOULD NOT be doing this. Fix later with context update.
             if self.event_parse_stop.is_set():
+                print(Colors.ENDC+"\n") #Clean up errors due to incorrect coloration; will be depricated later but nice to have now.
                 self.viewer.render("\n","","assistant")
+                chat_generator.close()
                 break
         
         self.event_parse_stop.clear()
@@ -601,9 +589,18 @@ class ChatInstance(ttk.Frame):
         self.progress_bar.grid_forget()
         self.button_parse_stop.grid_forget()
         self.button_parse_send.grid(row=0, column=31, sticky="news")
-        
+
+        #NOTE: Desync issues when generation canceled early. Generation ID isn't reliable? Figure out how to fix...
         if not self.chat_error:
-            self.uus_thread_handler() #Lets see if this works better.
+            if (self.message_id is not None) and (self.usage_credits is None):
+                print("Used credits not found in message. Pulling from generation.")
+                self.usage_credits = self.pull_credit_usage_from_generation_id(self.message_id)
+            if self.usage_credits is None:
+                print("Used credits not found. Exiting early.")
+                return
+            print("Passing used credits to credit update chain.")
+            self.root.credits_delta_queue.put(self.usage_credits)
+            self.root.event_generate("<<update_credits>>")
 
     def chat(self,timeout=0):
         #generate payload.
@@ -665,9 +662,17 @@ class ChatInstance(ttk.Frame):
                                 print((Colors.WARNING if prompt >= 20000 else "")+f"input: {prompt:,}"+Colors.ENDC)
                                 completion = u["completion_tokens"]
                                 print(f"completion: {completion:,}")
+                                # First, check to make sure this works properly. (DEBUG)
+                                print("\n"+Colors.ENDC+Colors.UNDERLINE+"COST"+Colors.ENDC)
+                                print(u["cost"])
+                                # Second, instantiate it.
+                                self.usage_credits = u["cost"]
+                            if self.message_id is None:
+                                self.message_id = data.get("id")
 
                             # #These two blocks might not exist when streaming a request. Commented out.
                             # #Kind of a shame - I would have liked to see the reasoning.
+                                # This might actually be possible, but currently out of scope. Experiment later.
                             # elif data.get("refusal"):
                             #         print(Colors.FAIL+"Endpoint Refusal\n"+Colors.ENDC+json.dumps(data["refusal"],indent=4))
                             # if data.get("reasoning"):
@@ -691,6 +696,7 @@ class ChatInstance(ttk.Frame):
                 yield "Streaming Error. Please try again later.\n"
 
         except HTTPError:
+            self.chat_error = True
             r = resp.json()
             if r.get("error"):
                 print(Colors.FAIL+Colors.UNDERLINE+"Endpoint Error"+Colors.ENDC+": "+Colors.FAIL+r["error"]["message"]+Colors.ENDC)
@@ -700,13 +706,13 @@ class ChatInstance(ttk.Frame):
                 print(resp.json())
                 yield "Problem with upstream generation function. Please try again later.\n"
         except (MissingSchema, InvalidSchema, InvalidURL):
+            self.chat_error = True
             yield "Problem with URL. Please check.\n"
         except (Timeout, ConnectionError):
-            # #I don't think this will actually work due to stream interuptions.
-            # if timeout < 3:
-            #     print(f"Retrying due to connection timeout. Attempt {timeout+1}")
-            #     return self.chat(timeout=timeout+1)
+            self.chat_error = True
             yield "Connection error. Please try again later.\n"
+        finally:
+            resp.close()
 
     def one_message_back(self):
         #print("This is probably not depricated, but it has issues.")
@@ -884,6 +890,12 @@ class ChatApp(ttk.Window):
         self.cache_image_unset = icon_to_image("database",fill=self.colors.warning, scale_to_width=16)
         self.cache_image_set = icon_to_image("database",fill=self.colors.get_foreground("default"), scale_to_width=16)
 
+        self.credits = None
+        self.credits_delta_queue = queue.Queue()
+        self.credits_ui = tk.StringVar(self,"Credits: ERR")
+        self.bind("<<update_credits>>",lambda e: self.update_credits())
+        self.get_credits()
+
         self.chat_tabs = ttk.Notebook(self)
         self.chat_tabs.pack(expand=True,fill="both")
 
@@ -892,6 +904,33 @@ class ChatApp(ttk.Window):
         init_zero = ChatInstance(self.chat_tabs,0,root=self)
         self.chat_tabs.add(init_zero,text="Chat 0")
         self.chats.append(init_zero)
+
+    def get_credits(self):
+        """Update the credit ui with ground-truth value. Returns True if successful, False if error."""
+        resp = requests.get("https://openrouter.ai/api/v1/credits",headers={"authorization": f"Bearer {KEY}"})
+        if resp.status_code == 200:
+            data = resp.json()["data"]
+            self.credits = data["total_credits"]-data["total_usage"]
+            self.credits_ui.set(f"Credits: {self.credits:.3f}")
+            return True
+        else:
+            print(Colors.FAIL+Colors.UNDERLINE+"Key Error"+Colors.ENDC+": "+Colors.FAIL+resp.json()["error"]["message"]+Colors.ENDC)
+            print(resp.json()["error"])
+            return False
+    
+    def update_credits(self):
+        """Consume the credit queue and update the UI with the new value."""
+        #If we don't have a valid number of credits, try to get the value from Openrouter. If that fails, exit early.
+        if self.credits is None:
+            if not self.get_credits():
+                return
+        while True:
+            try:
+                self.credits -= self.credits_delta_queue.get_nowait()
+                self.credits_delta_queue.task_done()
+            except queue.Empty:
+                break
+        self.credits_ui.set(f"Credits: {self.credits:.3f}")
         
 if __name__ == "__main__":
     #Setting taskbar icon
