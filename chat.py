@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 #TODO: look into automatic caching, maybe.
 #      - This might actually be done sometimes on the provider side?
 #TODO: figure out how to fix credit updates when request canceled early.
+#TODO: should really use proper paths for path things. Also create folders if not exists?
 
 load_dotenv(os.path.dirname(__file__)+"/.env")
 
@@ -190,7 +191,7 @@ class SPWindow(Popout):
             self.export_button.config(state="disabled")
 
     def import_prompt(self,overwrite=True):
-        filename = filedialog.askopenfilename(filetypes=[("Prompts JSON","*.json")],defaultextension="*.json")
+        filename = filedialog.askopenfilename(filetypes=[("Prompts JSON","*.json")],defaultextension="*.json",initialdir=os.path.dirname(__file__)+"/prompts/")
         if filename:
             with open(filename, encoding="utf-8") as file:
                 import_sp = json.load(file)
@@ -211,7 +212,7 @@ class SPWindow(Popout):
                 self.add_prompt_part(part.get("content",""))
                 
     def export_prompt(self):
-        filename = filedialog.asksaveasfilename(filetypes=[("Prompts JSON","*.json")],defaultextension="*.json")
+        filename = filedialog.asksaveasfilename(filetypes=[("Prompts JSON","*.json")],initialdir=os.path.dirname(__file__)+"/prompts/",defaultextension="*.json")
         if filename:
             with open(filename, mode="w", encoding="utf-8") as file:
                 prompt_data = {"header":f"prompt import - v{VERSION}","prompts":[{"role":"system","content":part.get("1.0", "end-1c").rstrip()} for part in self.sp_parts.values()]}
@@ -771,7 +772,7 @@ class ChatInstance(ttk.Frame):
 
     def save_context(self):
             filetypes = [("JSON", "*.json"), ("Text", "*.txt")]
-            filename = filedialog.asksaveasfilename(filetypes=filetypes, defaultextension=".json")
+            filename = filedialog.asksaveasfilename(filetypes=filetypes, initialdir=os.path.dirname(__file__)+"/output/", defaultextension=".json")
             if filename:
                 self.update_context(force=True)
                 if filename.lower().endswith(".json"):
@@ -802,7 +803,7 @@ class ChatInstance(ttk.Frame):
         self.progress_bar.grid(row=1, column=0, sticky="news")
 
         filetypes = [("JSON","*.json")]
-        filename = filedialog.askopenfilename(filetypes=filetypes, defaultextension=".json")
+        filename = filedialog.askopenfilename(filetypes=filetypes, initialdir=os.path.dirname(__file__)+"/output/", defaultextension=".json")
         if filename:
             with open(filename, "r", encoding="utf-8") as file:
                 session_data = json.load(file)
