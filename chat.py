@@ -36,7 +36,8 @@ load_dotenv(os.path.dirname(__file__)+"/.env")
 
 VERSION = "V2"
 
-BASE = os.getenv("API_BASE","https://openrouter.ai/api/v1/chat/completions")
+BASE = os.getenv("API_BASE","https://openrouter.ai/api")
+CHAT_ROUTE = os.getenv("API_CHAT_ROUTE",BASE+"/v1/chat/completions") #May use a more updated form later.
 KEY = os.getenv("API_KEY","")
 
 MODEL = "anthropic/claude-sonnet-4.6"
@@ -554,7 +555,7 @@ class ChatInstance(ttk.Frame):
 
     def pull_credit_usage_from_generation_id(self,id):
         """Given an ID for an openrouter generation, return the usage information in credits, or None if the request failed."""
-        resp = requests.get("https://openrouter.ai/api/v1/generation",headers={"authorization": f"Bearer {KEY}"},params={"id":id})
+        resp = requests.get(BASE+"/v1/generation",headers={"authorization": f"Bearer {KEY}"},params={"id":id})
         if resp.status_code != 200:
             print(resp.json()["error"]["message"])
             return None
@@ -636,7 +637,7 @@ class ChatInstance(ttk.Frame):
                 "User-Agent": "Mozilla/1.0 (Win3.1)"
                 }
 
-            resp = requests.post(BASE,headers=headers,json=payload,stream=True, timeout=60)
+            resp = requests.post(CHAT_ROUTE,headers=headers,json=payload,stream=True, timeout=60)
             resp.raise_for_status()
 
             try:
@@ -908,7 +909,7 @@ class ChatApp(ttk.Window):
 
     def get_credits(self):
         """Update the credit ui with ground-truth value. Returns True if successful, False if error."""
-        resp = requests.get("https://openrouter.ai/api/v1/credits",headers={"authorization": f"Bearer {KEY}"})
+        resp = requests.get(BASE+"/v1/credits",headers={"authorization": f"Bearer {KEY}"})
         if resp.status_code == 200:
             data = resp.json()["data"]
             self.credits = data["total_credits"]-data["total_usage"]
