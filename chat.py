@@ -11,12 +11,12 @@ import queue
 from random import randint
 from requests.exceptions import HTTPError,MissingSchema,InvalidSchema,InvalidURL,Timeout
 from tkinter import filedialog
-from ttkbootstrap.dialogs import Messagebox, Querybox
-from ttkbootstrap.toast import ToastNotification
-from ttkbootstrap.scrolled import ScrolledFrame, ScrolledText
-from ttkbootstrap.tooltip import ToolTip
+# from ttkbootstrap.dialogs import ttk.Messagebox, ttk.Querybox
+# from ttkbootstrap.toast import ttk.ToastNotification
+# from ttkbootstrap.scrolled import ttk.ScrolledFrame, ttk.ScrolledText
+# from ttkbootstrap.tooltip import ttk.ToolTip
 from ctypes import windll, byref, sizeof, c_int
-from tkfontawesome import icon_to_image
+from tkfontawesome import icon_to_image #NOTE to self: package that's being used here is unsuported & really needs to be updated/inlined.
 from pathlib import Path
 from collections import OrderedDict
 from uuid import uuid4
@@ -78,7 +78,7 @@ def colormode(window,color):
 class PlaintextViewer(ttk.Frame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        self.textbox = tk.Text(self, borderwidth=0, wrap="word", font=("MS Gothic" if self.master.international_mode else "Consolas","10"))
+        self.textbox = ttk.Text(self, borderwidth=0, wrap="word", font=("MS Gothic" if self.master.international_mode else "Consolas","10"))
         #self.textbox = tk.Text(self, borderwidth=0, wrap="word", font=('MS Gothic', 10))
         self.textbox.pack(side="left", fill="both", expand=True)
         self.scrollbar = ttk.Scrollbar(self, command=self.textbox.yview, bootstyle="round")
@@ -156,7 +156,7 @@ class SPWindow(Popout):
                                         state="normal" if not (self.check_sp.get() or len(self.master.system_prompt) == 0) else "disabled")
         self.export_button.pack(side="left",expand=True,fill="x")
 
-        self.complex_sp_frame = ScrolledFrame(self,autohide=True)
+        self.complex_sp_frame = ttk.ScrolledFrame(self,autohide=True)
         self.complex_sp_frame.grid(column=0,row=2,sticky="news")
 
         self.sp_parts = OrderedDict()
@@ -169,7 +169,7 @@ class SPWindow(Popout):
         prompt_frame = ttk.Frame(self.complex_sp_frame)
         prompt_frame.rowconfigure(0,weight=1)
         prompt_frame.columnconfigure(1,weight=10)
-        prompt_text = ScrolledText(prompt_frame, wrap="word", borderwidth=0, height=5, autohide=True)
+        prompt_text = ttk.ScrolledText(prompt_frame, wrap="word", borderwidth=0, height=5, autohide=True)
         prompt_text.insert("end", content)
         prompt_text.grid(row=0,column=1,sticky="news")
         prompt_text.button = ttk.Button(prompt_frame,image=self.master.root.delete_image,bootstyle="danger",command=lambda: self.remove_prompt_part(prompt_id))
@@ -197,7 +197,7 @@ class SPWindow(Popout):
             with open(filename, encoding="utf-8") as file:
                 import_sp = json.load(file)
             if import_sp.get("prompts",{}) == {}:
-                ToastNotification("Error","Couldn't import prompts. Do they exist?",
+                ttk.ToastNotification("Error","Couldn't import prompts. Do they exist?",
                     duration="3000",alert=True,bootstyle="danger",
                     icon="\ue783",iconfont=("Segoe Fluent Icons","16")).show_toast()
                 return
@@ -280,26 +280,26 @@ class SettingsWindow(Popout):
         model_frame.pack(side="top",expand=True,fill="both")
         self.model = tk.StringVar(self,value=self.master.chat_properties.get("model", MODEL))
         ttk.Entry(model_frame,exportselection=False,textvariable=self.model).pack(side="left",expand=True,fill="both")
-        ToolTip(model_frame,topmost=True,text="ID of the model to use.")
+        ttk.ToolTip(model_frame,topmost=True,text="ID of the model to use.")
 
         max_tokens_frame = ttk.LabelFrame(self,text="Maximum Tokens")
         max_tokens_frame.pack(side="top",expand=True,fill="both")
         self.max_tokens = tk.IntVar(self,value=self.master.chat_properties.get("max_tokens", 2048))
         ttk.Spinbox(max_tokens_frame,from_=0,to=4096,increment=1,textvariable=self.max_tokens).pack(side="left",expand=True,fill="both")
-        ToolTip(max_tokens_frame,topmost=True,text="The maximum number of tokens that can be generated in the chat completion.")
+        ttk.ToolTip(max_tokens_frame,topmost=True,text="The maximum number of tokens that can be generated in the chat completion.")
 
         reasoning_frame = ttk.LabelFrame(self,text="Reasoning Effort")
         reasoning_frame.pack(side="top",expand=True,fill="both")
         self.reasoning = tk.StringVar(self,value=master.chat_properties.get("reasoning_effort","none"))
         ttk.Combobox(reasoning_frame,state="readonly",values=["max","xhigh","high","medium","low","minimal","none"],textvariable=self.reasoning).pack(side="left",expand=True,fill="both")
-        ToolTip(reasoning_frame,topmost=True,text="Amount of effort the model uses in reasoning.")
+        ttk.ToolTip(reasoning_frame,topmost=True,text="Amount of effort the model uses in reasoning.")
 
         extra_frame = ttk.LabelFrame(self,text="Extra Options (JSON FORMAT ONLY)")
         extra_frame.pack(side="top",expand=True,fill="both")
         extra = json.dumps({k:v for k,v in self.master.chat_properties.items() if k not in FEATURES})
         self.extra_options = tk.StringVar(self,value=extra)
         ttk.Entry(extra_frame,exportselection=False,textvariable=self.extra_options).pack(side="left",expand=True,fill="both")
-        ToolTip(extra_frame,topmost=True,text="Extra request body parameters. Must be JSON Format only. Mostly used for Gemini.")
+        ttk.ToolTip(extra_frame,topmost=True,text="Extra request body parameters. Must be JSON Format only. Mostly used for Gemini.")
 
         misc_frame = ttk.LabelFrame(self,text="Misc. Options")
         misc_frame.pack(side="top",expand=True,fill="both")
@@ -307,7 +307,7 @@ class SettingsWindow(Popout):
         ttk.Checkbutton(misc_frame,bootstyle="round-toggle",variable=self.international_mode,command=self.international_switch,text="International Mode").pack(side="left",expand=True,fill="both")
         # self.extra_options = tk.StringVar(self,value=extra)
         # ttk.Entry(extra_frame,exportselection=False,textvariable=self.extra_options).pack(side="left",expand=True,fill="both")
-        # ToolTip(extra_frame,topmost=True,text="Extra request body parameters. Must be JSON Format only. Mostly used for Gemini.")
+        # ttk.ToolTip(extra_frame,topmost=True,text="Extra request body parameters. Must be JSON Format only. Mostly used for Gemini.")
 
         debug_frame = ttk.LabelFrame(self,text="DEBUG BUTTONS")
         debug_frame.pack(side="top",expand=True,fill="both")
@@ -323,7 +323,7 @@ class SettingsWindow(Popout):
         var = tk.DoubleVar(self,value=variable)
         ttk.Scale(frame,from_=bounds[0],to=bounds[1],length=500,variable=var).pack(side="left",expand=True,fill="both")
         ttk.Spinbox(frame,from_=bounds[0],to=bounds[1],increment=increment,textvariable=var).pack(side="left",expand=True,fill="both")
-        ToolTip(frame,text=tooltip,topmost=True)
+        ttk.ToolTip(frame,text=tooltip,topmost=True)
         return var
     
     def international_switch(self):
@@ -349,7 +349,7 @@ class SettingsWindow(Popout):
             chat_properties_temp.update(json.loads(self.extra_options.get()))
         except json.JSONDecodeError as e:
             print(e)
-            ToastNotification("Error","Make sure Extra Options are properly formatted JSON.",
+            ttk.ToastNotification("Error","Make sure Extra Options are properly formatted JSON.",
                                   duration="3000",alert=True,bootstyle="danger",
                                   icon="\ue783",iconfont=("Segoe Fluent Icons","16")).show_toast()
             return
@@ -454,7 +454,7 @@ class ChatInstance(ttk.Frame):
             self.system_prompt_input.configure(state="disabled",fg=self.root.colors.get("darkerinputfg"),bg=self.root.colors.get("darkerinputbg"))
         self.system_prompt_input.bind("<<Modified>>",lambda event: self.prompt_field_wait_handler("system_prompt"))
 
-        self.prefill_input = tk.Text(frame, wrap="word", height=2, borderwidth=0)
+        self.prefill_input = ttk.Text(frame, wrap="word", height=2, borderwidth=0)
         self.prefill_input.grid(row=1, column=1, sticky="news")
         self.prefill_input.insert("end", self.prefill)
         self.prefill_input.bind("<<Modified>>",lambda event: self.prompt_field_wait_handler("prefill"))
@@ -490,7 +490,7 @@ class ChatInstance(ttk.Frame):
         frame.rowconfigure(2, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        self.editor = tk.Text(frame, wrap="word", height=5, borderwidth=0, undo=True, font=("MS Gothic" if self.international_mode else "Cascadia Mono","10"))
+        self.editor = ttk.Text(frame, wrap="word", height=5, borderwidth=0, undo=True, font=("MS Gothic" if self.international_mode else "Cascadia Mono","10"))
         self.editor.grid(row=2, column=0, sticky="news")
         self.editor.bind("<Shift-Return>", self.parse_user_input)
 
@@ -762,7 +762,7 @@ class ChatInstance(ttk.Frame):
         SettingsWindow(self)
 
     def restart_session(self):
-        answer = Messagebox.okcancel("Restart this session?","Confirm")
+        answer = ttk.Messagebox.okcancel("Restart this session?","Confirm")
         if answer and (answer.lower() == "ok"):
             self.context.clear()
             self.viewer.clear()
@@ -835,10 +835,10 @@ class ChatInstance(ttk.Frame):
         self.progress_bar.grid_forget()
 
     def delete_session(self):
-        answer = Messagebox.okcancel("Delete this session?","Confirm")
+        answer = ttk.Messagebox.okcancel("Delete this session?","Confirm")
         if answer and (answer.lower() == "ok"):
             if len(self.root.chats) == 1:
-                ToastNotification("Error","Unable to delete all chat sessions.",
+                ttk.ToastNotification("Error","Unable to delete all chat sessions.",
                                   duration="3000",alert=True,bootstyle="danger",
                                   icon="\ue783",iconfont=("Segoe Fluent Icons","16")).show_toast()
                 return
@@ -853,7 +853,7 @@ class ChatInstance(ttk.Frame):
         print(self.id)
         name = self.master.tab(self.id)['text']
         print(name)
-        new_name = Querybox().get_string("New chat name: ","Rename",name)
+        new_name = ttk.Querybox().get_string("New chat name: ","Rename",name)
         self.master.tab(self.id,text=new_name)
 
 class ChatApp(ttk.Window):
